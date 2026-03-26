@@ -39,10 +39,23 @@ def load_camera_matrix(cfg: dict) -> tuple:
 
 
 def open_robot_bridge(cfg: dict, use_mock: bool):
-    """Open HERMES robot bridge."""
+    """
+    Open robot bridge.
+
+    Mock mode priority:
+      1. HERMES MockRobotBridge (if hermes is installed)
+      2. Local LocalMockRobotBridge (no HERMES dependency)
+
+    Real mode:
+      Requires HERMES with FlexivRobotBridge.
+    """
     if use_mock:
-        from hermes.bridge.mock import MockRobotBridge
-        bridge = MockRobotBridge()
+        try:
+            from hermes.bridge.mock import MockRobotBridge
+            bridge = MockRobotBridge()
+        except ImportError:
+            from zed2i_calibrate.robot_mock import LocalMockRobotBridge
+            bridge = LocalMockRobotBridge()
     else:
         from hermes.bridge.flexiv import FlexivRobotBridge
         from hermes.bridge.base import BridgeConfig

@@ -171,8 +171,16 @@ def solve_all_methods(
             rot_err, t_err = _leave_one_out(
                 T_base_tcp_list, T_cam_board_list, mode, method_enum
             )
+            # Filter out NaN results
+            if np.isnan(rot_err) or np.isnan(t_err):
+                rot_err = 99.0
+                t_err = 999.0
             r.rotation_error_deg = rot_err
             r.translation_error_mm = t_err
+            # Skip results with NaN in the transform itself
+            if np.any(np.isnan(r.T)):
+                print(f"  [{name}] SKIPPED: NaN in result matrix")
+                continue
             results.append(r)
         except cv2.error as e:
             print(f"  [{name}] FAILED: {e}")
