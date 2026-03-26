@@ -168,7 +168,7 @@ class HandEyeCollector:
             rvec_board=result.rvec,
             tvec_board=result.tvec,
             n_corners=result.n_corners,
-            reprojection_error=result.reprojection_error or 0.0,
+            reprojection_error=result.reprojection_error if result.reprojection_error is not None else 0.0,
             tcp_pose=tcp_arr,
             q=q_arr,
             T_base_tcp=T_base_tcp,
@@ -259,12 +259,10 @@ class HandEyeCollector:
         Load saved samples for hand-eye solving.
 
         Returns:
-            (R_gripper2base_list, t_gripper2base_list,
-             R_target2cam_list, t_target2cam_list,
-             metadata)
-
-        Actually returns:
-            (T_base_tcp_list, T_cam_board_list, metadata)
+            Tuple of (T_base_tcp_list, T_cam_board_list, metadata):
+              - T_base_tcp_list: List of (4,4) base←tcp transforms
+              - T_cam_board_list: List of (4,4) cam←board transforms
+              - metadata: dict from samples.json
         """
         d = Path(samples_dir)
         json_path = d / "samples.json"

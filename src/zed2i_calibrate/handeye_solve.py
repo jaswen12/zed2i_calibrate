@@ -171,7 +171,8 @@ def solve_all_methods(
             rot_err, t_err = _leave_one_out(
                 T_base_tcp_list, T_cam_board_list, mode, method_enum
             )
-            # Filter out NaN results
+            # Replace NaN with sentinel values so sorting still works.
+            # These large values push unstable methods to the bottom of the ranking.
             if np.isnan(rot_err) or np.isnan(t_err):
                 rot_err = 99.0
                 t_err = 999.0
@@ -199,11 +200,17 @@ def _leave_one_out(
     """
     Leave-one-out consistency check.
 
-    Returns (rotation_spread_deg, translation_spread_mm).
+    Drops each sample one at a time, re-solves, and measures spread
+    of the resulting transforms. Lower spread = more robust.
+
+    Returns:
+        (rotation_spread_deg, translation_spread_mm).
+        Returns (0.0, 0.0) if n < 5 (too few for meaningful LOO).
+        Returns (99.0, 999.0) if fewer than 3 LOO solves succeeded
+        (indicates the method is unstable with this data).
     """
     n = len(T_bt)
     if n < 5:
-        # Too few samples for meaningful LOO
         return 0.0, 0.0
 
     Ts = []

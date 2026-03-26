@@ -115,26 +115,20 @@ def _validate_board_in_base(
     T_cam_board_list: List[np.ndarray],
 ) -> None:
     """
-    Eye-on-base consistency: board origin in base frame.
+    Eye-on-base consistency check.
 
-    For eye_on_base:
-        T_cam2base = solved result (camera → base)
-        board_in_base = T_cam2base^-1 * ... no
+    In eye-on-base mode, the board is rigidly attached to the robot gripper.
+    Therefore T_tcp←board (the board's position relative to the TCP) should be
+    constant across all samples.
 
-    Actually:
-        T_result from calibrateHandEye in eye-to-hand mode = T_cam←base
-        (camera to base? or base to camera?)
+    Kinematic chain:
+        T_result (from calibrateHandEye) = T_cam←base
+        T_base←cam = inv(T_result)
+        T_base←board = T_base←cam @ T_cam←board
+        T_tcp←board  = inv(T_base←tcp) @ T_base←board   ← should be constant
 
-    The relationship:
-        T_base←board = T_base←cam * T_cam←board
-        where T_base←cam = inv(T_cam←base) = inv(T_result)
-
-    The board is rigidly attached to the gripper, so:
-        T_base←board should relate to T_base←tcp by a constant offset.
-
-    We check: T_base←board = inv(T_result) @ T_cam←board
-    This should be consistent with T_base←tcp @ T_tcp←board
-    where T_tcp←board is constant.
+    We compute T_tcp←board for every sample and measure its spread.
+    Low spread = good calibration; high spread = poor result or bad data.
     """
     T_base_cam = np.linalg.inv(T_cam2base)
 
