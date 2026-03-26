@@ -18,6 +18,12 @@ results/
 # macOS
 .DS_Store
 
+# Claude Code
+.claude/
+
 # Editors
 .vscode/
 .idea/
+
+# Reference docs (not source code)
+*.docx
