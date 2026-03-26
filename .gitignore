@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Data (large files, not tracked in git)
+data/stereo_samples/
+data/eye_on_base/
+data/eye_on_hand/
+
+# Results (regeneratable)
+results/
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/

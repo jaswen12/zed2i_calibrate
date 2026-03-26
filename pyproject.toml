@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zed2i-calibrate"
+version = "0.1.0"
+description = "ZED2i stereo camera calibration pipeline (independent of HERMES)"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.24.0",
+    "opencv-contrib-python>=4.8.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Install HERMES separately via: pip install -e /path/to/HERMES
+# Listed here for documentation only — not auto-installed to avoid path assumptions
+hermes = []
+
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]
+ignore = ["E501"]

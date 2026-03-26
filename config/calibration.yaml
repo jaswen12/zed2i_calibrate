@@ -1,0 +1,83 @@
+# =============================================================================
+# ZED2i Stereo Camera Calibration Configuration
+# =============================================================================
+# All parameters centralized here. Scripts read this file at runtime.
+# Do NOT hardcode these values in scripts.
+
+# -----------------------------------------------------------------------------
+# ChArUco Board Specification
+# Fill in after board is purchased/printed. Verify square_length_mm with
+# a caliper against the physical board.
+# -----------------------------------------------------------------------------
+board:
+  squares_x: 11           # Number of squares along X axis
+  squares_y: 8            # Number of squares along Y axis
+  square_length_mm: 30.0  # Chessboard square side length (measure with caliper!)
+  marker_length_mm: 22.5  # ArUco marker side length (typically 0.75 * square_length)
+  aruco_dict: "DICT_4X4_100"  # ArUco dictionary: DICT_4X4_50/100/250/1000, DICT_5X5_*, etc.
+
+# -----------------------------------------------------------------------------
+# ZED2i Camera Settings
+# -----------------------------------------------------------------------------
+camera:
+  resolution: "HD1080"    # HD2K, HD1080, HD720, VGA
+  fps: 15                 # Capture FPS during calibration (lower = more stable)
+  # Serial number (optional, for multi-camera setups)
+  serial_number: null
+
+# -----------------------------------------------------------------------------
+# Stereo Calibration (Step 1)
+# Settings for re-calibrating ZED2i intrinsics + stereo baseline
+# -----------------------------------------------------------------------------
+stereo_calibration:
+  min_samples: 30          # Minimum valid frames required
+  max_samples: 80          # Stop collecting after this many valid frames
+  # Flags passed to cv2.stereoCalibrate
+  # CALIB_FIX_INTRINSIC: fix intrinsics from single-camera pass
+  # CALIB_USE_INTRINSIC_GUESS: use ZED factory intrinsics as initial guess
+  use_factory_intrinsics_as_guess: true
+  fix_intrinsics: false    # Set true to only solve for R,T (use factory K, dist)
+
+# -----------------------------------------------------------------------------
+# Hand-Eye Calibration (Steps 3 & 4)
+# -----------------------------------------------------------------------------
+handeye:
+  # Eye-on-base: camera is FIXED, robot moves the board
+  # Eye-on-hand: camera is ON the robot flange, board is FIXED
+  mode: "eye_on_base"      # "eye_on_base" or "eye_on_hand"
+
+  min_samples: 15          # Minimum valid pose pairs required
+  max_samples: 50
+
+  # OpenCV calibrateHandEye method:
+  # TSAI, PARK, HORAUD, ANDREFF, DANIILIDIS
+  method: "TSAI"
+
+  # Robot interface: "flexiv" or "mock"
+  robot_interface: "mock"  # Change to "flexiv" on Ubuntu with real robot
+
+  # Flexiv robot settings (only used when robot_interface = "flexiv")
+  robot:
+    serial_number: "Rizon4s-062626"  # Replace with actual S/N
+    local_ip: null                    # null = auto-detect
+
+  # Sampling: robot must be stationary before capture
+  settle_time_s: 1.5       # Wait this long after robot stops moving
+
+# -----------------------------------------------------------------------------
+# Data Paths
+# -----------------------------------------------------------------------------
+paths:
+  stereo_samples: "data/stereo_samples"
+  eye_on_base_samples: "data/eye_on_base"
+  eye_on_hand_samples: "data/eye_on_hand"
+  results: "results"
+
+# -----------------------------------------------------------------------------
+# Output Files
+# -----------------------------------------------------------------------------
+output:
+  zed_intrinsics: "results/zed_intrinsics.yaml"
+  stereo_extrinsics: "results/stereo_extrinsics.yaml"
+  eye_on_base: "results/eye_on_base_T.yaml"
+  eye_on_hand: "results/eye_on_hand_T.yaml"
