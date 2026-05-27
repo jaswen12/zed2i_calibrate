@@ -192,6 +192,168 @@ class ZedMockCamera(ZedCamera):
 
 
 # ---------------------------------------------------------------------------
+# UVC implementation (any OS, no ZED SDK / NVIDIA required)
+# ---------------------------------------------------------------------------
+
+class ZedUVCCamera(ZedCamera):
+    """
+    ZED2i via UVC (USB Video Class) using cv2.VideoCapture.
+
+    The ZED2i exposes itself as a standard UVC device that streams a
+    side-by-side stereo image (left half = left eye, right half = right eye).
+    No ZED SDK or NVIDIA GPU is required — works on Ubuntu without GPU,
+    macOS, Windows, etc.
+
+    Trade-offs vs. ZedRealCamera:
+      LOSE: factory EEPROM intrinsics (we return approximate defaults instead),
+            IMU, hardware depth, hardware rectification.
+      KEEP: synchronized stereo image pairs, which is everything stereo
+            calibration and ChArUco-based hand-eye need.
+
+    The returned intrinsics are *placeholders* sized to the chosen resolution.
+    They should only be used as an initial guess for stereoCalibrate
+    (script 02). The real values come out of that calibration step.
+    """
+
+    # Side-by-side UVC modes (combined_width, height, max_fps)
+    _RESOLUTION_MAP: dict[str, Tuple[int, int, int]] = {
+        "HD2K":   (4416, 1242, 15),
+        "HD1080": (3840, 1080, 30),
+        "HD720":  (2560, 720, 60),
+        "VGA":    (1344, 376, 100),
+    }
+
+    # Rough ZED2i factory values (per single eye) for each resolution.
+    # Real calibration will refine these; we just need a reasonable initial
+    # guess so cv2.calibrateCamera doesn't diverge.
+    _FALLBACK_INTRINSICS: dict[str, dict] = {
+        "HD2K":   {"fx": 1400.0, "fy": 1400.0, "cx": 1104.0, "cy": 621.0},
+        "HD1080": {"fx": 1059.0, "fy": 1059.0, "cx": 960.0,  "cy": 540.0},
+        "HD720":  {"fx": 706.0,  "fy": 706.0,  "cx": 640.0,  "cy": 360.0},
+        "VGA":    {"fx": 350.0,  "fy": 350.0,  "cx": 336.0,  "cy": 188.0},
+    }
+
+    _BASELINE_M = 0.12  # ZED2i nominal stereo baseline (120 mm)
+
+    def __init__(
+        self,
+        resolution: str = "HD1080",
+        fps: int = 15,
+        device_index: int = 0,
+    ) -> None:
+        self.resolution_name = resolution
+        self.fps = fps
+        self.device_index = device_index
+        self._cap: Optional[object] = None
+        self._image_size: Tuple[int, int] = (0, 0)  # single eye (w, h)
+        self._combined_size: Tuple[int, int] = (0, 0)
+
+    def open(self) -> None:
+        import cv2
+
+        if self.resolution_name not in self._RESOLUTION_MAP:
+            raise ValueError(
+                f"Unknown resolution: {self.resolution_name!r}. "
+                f"Valid: {list(self._RESOLUTION_MAP)}"
+            )
+        w_total, h, max_fps = self._RESOLUTION_MAP[self.resolution_name]
+
+        cap = cv2.VideoCapture(self.device_index)
+        if not cap.isOpened():
+            raise RuntimeError(
+                f"Cannot open UVC device at index {self.device_index}. "
+                f"Check `v4l2-ctl --list-devices` (Linux) or System Settings → "
+                f"Privacy → Camera (macOS). Try a different index."
+            )
+
+        # MJPG is required for high-resolution stereo modes — YUYV is
+        # bandwidth-limited to ~1080p side-by-side on USB 3.
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, w_total)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        cap.set(cv2.CAP_PROP_FPS, min(self.fps, max_fps))
+
+        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+
+        if (actual_w, actual_h) != (w_total, h):
+            print(
+                f"[ZedUVCCamera] WARNING: requested {w_total}x{h}, "
+                f"got {actual_w}x{actual_h}. Resolution name may be wrong, "
+                f"or the camera is not a ZED2i."
+            )
+
+        # Single-eye image size
+        self._combined_size = (actual_w, actual_h)
+        self._image_size = (actual_w // 2, actual_h)
+        self._cap = cap
+
+        print(
+            f"[ZedUVCCamera] Opened device {self.device_index}: "
+            f"{actual_w}x{actual_h} @ {actual_fps:.0f}fps "
+            f"(single eye: {self._image_size[0]}x{self._image_size[1]})"
+        )
+
+    def close(self) -> None:
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
+            print("[ZedUVCCamera] Closed")
+
+    def grab(self) -> StereoFrame:
+        if self._cap is None:
+            raise RuntimeError("Camera is not open")
+
+        ok, frame = self._cap.read()
+        if not ok or frame is None:
+            raise RuntimeError("UVC grab failed — camera disconnected?")
+
+        # Split side-by-side. ZED stereo convention: left half = LEFT eye.
+        w_total = frame.shape[1]
+        mid = w_total // 2
+        left = frame[:, :mid].copy()
+        right = frame[:, mid:].copy()
+
+        return StereoFrame(
+            left=left,
+            right=right,
+            timestamp_ns=time.monotonic_ns(),
+        )
+
+    def get_intrinsics(self) -> StereoIntrinsics:
+        """
+        Return *placeholder* intrinsics scaled to the current resolution.
+
+        These are approximate ZED2i factory values — not the unique calibration
+        for the specific physical unit. Use them only as an initial guess for
+        stereo calibration (script 02), then trust the calibrated values.
+        """
+        w, h = self._image_size
+        params = self._FALLBACK_INTRINSICS.get(
+            self.resolution_name,
+            self._FALLBACK_INTRINSICS["HD1080"],
+        )
+        K = np.array([
+            [params["fx"], 0.0,          params["cx"]],
+            [0.0,          params["fy"], params["cy"]],
+            [0.0,          0.0,          1.0],
+        ])
+        D = np.zeros((1, 5))
+        R = np.eye(3)
+        T = np.array([-self._BASELINE_M, 0.0, 0.0])
+        return StereoIntrinsics(
+            K_left=K.copy(),
+            D_left=D.copy(),
+            K_right=K.copy(),
+            D_right=D.copy(),
+            R=R,
+            T=T,
+            image_size=(w, h),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Real ZED implementation (Ubuntu + ZED SDK only)
 # ---------------------------------------------------------------------------
 
@@ -308,8 +470,13 @@ def open_camera(cfg: dict) -> ZedCamera:
     """
     Instantiate the correct camera from config.
 
-    Uses ZedMockCamera unless ZED SDK is available and robot_interface != mock.
-    Safe to call on macOS — will always return ZedMockCamera there.
+    Backend selection (config key ``camera.backend``):
+        "auto"  (default): try pyzed → ZedRealCamera, else fall back to
+                ZedMockCamera. Recommended for dev machines.
+        "real"  / "sdk":   force ZedRealCamera (requires NVIDIA + ZED SDK).
+        "uvc":             force ZedUVCCamera (raw USB capture, no GPU).
+                Required for non-NVIDIA Ubuntu / macOS with a physical camera.
+        "mock":            force ZedMockCamera (synthetic data for dev).
 
     Args:
         cfg: Loaded calibration config dict.
@@ -318,14 +485,36 @@ def open_camera(cfg: dict) -> ZedCamera:
         ZedCamera instance (not yet opened).
     """
     cam_cfg = cfg["camera"]
+    backend = str(cam_cfg.get("backend", "auto")).lower()
     resolution = cam_cfg.get("resolution", "HD1080")
     fps = cam_cfg.get("fps", 15)
     serial = cam_cfg.get("serial_number")
+    uvc_index = int(cam_cfg.get("uvc_device_index", 0))
+
+    if backend in ("real", "sdk"):
+        print("[camera] backend=real → using ZedRealCamera (requires pyzed)")
+        return ZedRealCamera(resolution=resolution, fps=fps, serial_number=serial)
+
+    if backend == "uvc":
+        print(f"[camera] backend=uvc → using ZedUVCCamera (device {uvc_index})")
+        return ZedUVCCamera(resolution=resolution, fps=fps, device_index=uvc_index)
+
+    if backend == "mock":
+        print("[camera] backend=mock → using ZedMockCamera (synthetic data)")
+        return ZedMockCamera(resolution=resolution, fps=fps)
+
+    if backend != "auto":
+        print(
+            f"[camera] WARN: unknown backend {backend!r}, falling back to 'auto'"
+        )
 
     try:
         import pyzed.sl  # noqa: F401
-        print("[camera] pyzed found → using ZedRealCamera")
+        print("[camera] backend=auto: pyzed found → using ZedRealCamera")
         return ZedRealCamera(resolution=resolution, fps=fps, serial_number=serial)
     except ImportError:
-        print("[camera] pyzed not found → using ZedMockCamera (dev mode)")
+        print(
+            "[camera] backend=auto: pyzed not found → using ZedMockCamera. "
+            "For real capture without ZED SDK, set camera.backend: 'uvc' in config."
+        )
         return ZedMockCamera(resolution=resolution, fps=fps)

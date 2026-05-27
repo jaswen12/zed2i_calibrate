@@ -12,8 +12,9 @@
 8. [Step 5: Batch Detection QA](#step-5-batch-detection-qa)
 9. [Step 6: Solve Hand-Eye](#step-6-solve-hand-eye)
 10. [Step 7: Validate Results](#step-7-validate-results)
-11. [Troubleshooting](#troubleshooting)
-12. [Appendix: Coordinate Frame Conventions](#appendix-coordinate-frame-conventions)
+11. [UVC Mode: No NVIDIA GPU Required](#uvc-mode-no-nvidia-gpu-required)
+12. [Troubleshooting](#troubleshooting)
+13. [Appendix: Coordinate Frame Conventions](#appendix-coordinate-frame-conventions)
 
 ---
 
@@ -388,11 +389,115 @@ You can remove outlier samples from `data/*/samples.json` and re-run Step 6.
 
 ---
 
+## UVC Mode: No NVIDIA GPU Required
+
+The ZED2i exposes itself as a standard UVC (USB Video Class) camera that
+streams a side-by-side stereo image. This means **you can capture calibration
+data without the ZED SDK** — useful when:
+
+- The host Ubuntu machine has no NVIDIA GPU (ZED SDK requires CUDA)
+- You want to capture on macOS or Windows
+- You can't get pyzed installed for any reason
+
+### What you lose vs. SDK mode
+
+| Feature | UVC mode | SDK mode |
+|---------|----------|----------|
+| Synchronized stereo image pairs | ✅ | ✅ |
+| Factory EEPROM intrinsics | ❌ (uses defaults) | ✅ |
+| Hardware depth | ❌ | ✅ |
+| Hardware rectification | ❌ | ✅ |
+| IMU data | ❌ | ✅ |
+
+For stereo calibration and ChArUco-based hand-eye calibration you only need
+synchronized stereo pairs, so UVC mode is sufficient. Stereo calibration
+(script 02) will compute correct intrinsics from your captured images.
+
+### Quick start: capture-only at the lab, calibrate at home
+
+If you cannot install the ``zed2i_calibrate`` package on the lab machine
+either, use the **standalone capture script** which only needs
+``opencv-contrib-python`` and ``numpy``:
+
+```bash
+# On the lab machine (no ZED SDK, no package install required)
+pip install opencv-contrib-python numpy
+
+# Verify the ZED2i is visible
+v4l2-ctl --list-devices              # Linux only
+lsusb | grep -i 'stereolabs\|zed'
+
+# Capture (no other dependencies)
+python scripts/01b_capture_uvc_only.py
+python scripts/01b_capture_uvc_only.py --resolution HD720 --device 0
+python scripts/01b_capture_uvc_only.py --output /tmp/captures
+```
+
+Captures land in ``data/stereo_samples/`` as ``left_NNNN.png`` /
+``right_NNNN.png`` pairs. Bring the directory home and run:
+
+```bash
+python scripts/02_stereo_calibrate.py --offline
+# or
+python scripts/02_stereo_calibrate.py --offline --samples-dir /path/to/data
+```
+
+### Integrated UVC mode (script 02 --live, script 03 / 04 --live)
+
+If you have the full package installed on the lab machine (just without ZED
+SDK), set the backend in ``config/calibration.yaml``:
+
+```yaml
+camera:
+  backend: "uvc"            # was "auto"
+  uvc_device_index: 0       # /dev/video0 on Linux
+  resolution: "HD1080"
+```
+
+Now the existing live scripts work the same as SDK mode:
+
+```bash
+python scripts/02_stereo_calibrate.py --live
+python scripts/03_collect_eye_on_base.py --live
+python scripts/04_collect_eye_on_hand.py --live
+```
+
+### Finding the right device index
+
+Linux:
+
+```bash
+v4l2-ctl --list-devices
+# Look for "ZED 2i: ZED 2i (usb-...)" — note the /dev/videoN number
+```
+
+macOS / Windows: the ZED2i is typically index ``0`` if no other camera is
+plugged in, otherwise increment until you find it.
+
+### Side-by-side resolutions
+
+UVC mode streams the combined frame (both eyes glued together horizontally).
+The script splits it for you. Supported modes:
+
+| Resolution | Combined size | Max FPS |
+|------------|----------------|---------|
+| HD2K       | 4416 × 1242    | 15      |
+| HD1080     | 3840 × 1080    | 30      |
+| HD720      | 2560 × 720     | 60      |
+| VGA        | 1344 × 376     | 100     |
+
+For calibration prefer HD1080 (good balance of detail vs. file size). HD720
+is fine if you're storage-limited or want higher FPS.
+
+---
+
 ## Troubleshooting
 
 ### "pyzed not found"
 
-Expected on macOS. The system automatically falls back to mock mode. On Ubuntu, install ZED SDK first.
+Expected on macOS or any Ubuntu without NVIDIA GPU. The system falls back to
+``ZedMockCamera`` by default; switch to UVC mode (see above) to capture from
+a real camera without the SDK.
 
 ### "Not enough informative motions"
 

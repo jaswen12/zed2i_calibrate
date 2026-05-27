@@ -264,12 +264,13 @@ def main() -> None:
     print("System is ready for real hardware deployment on Ubuntu.")
     print()
     print("Next steps:")
-    print("  1. Install ZED SDK on Ubuntu")
-    print("  2. pip install -e /path/to/HERMES")
-    print("  3. Update config/calibration.yaml:")
-    print("       robot_interface: flexiv")
-    print("       board specs (after purchasing)")
-    print("  4. Run scripts 00 → 01 → 02 → 03/04 → 06 → 07")
+    print("  1. Choose a camera backend in config/calibration.yaml:")
+    print("       camera.backend: 'auto' → ZED SDK if available (NVIDIA Ubuntu)")
+    print("       camera.backend: 'uvc'  → raw USB capture (no GPU; Linux/macOS)")
+    print("  2. For hand-eye on real hardware: pip install -e /path/to/HERMES")
+    print("       and set handeye.robot_interface: 'flexiv'")
+    print("  3. Run scripts 00 → 01 → 02 → 03/04 → 06 → 07")
+    print("       (or 01b_capture_uvc_only.py if package install isn't possible)")
 
 
 if __name__ == "__main__":

@@ -6,23 +6,34 @@
 
 # -----------------------------------------------------------------------------
 # ChArUco Board Specification
-# Fill in after board is purchased/printed. Verify square_length_mm with
-# a caliper against the physical board.
+# Verify square_length_mm with a caliper against the physical board.
+# Defaults match the calib.io 14x9 board (DICT_5X5, 40 mm squares, 30 mm markers).
 # -----------------------------------------------------------------------------
 board:
-  squares_x: 11           # Number of squares along X axis
-  squares_y: 8            # Number of squares along Y axis
-  square_length_mm: 30.0  # Chessboard square side length (measure with caliper!)
-  marker_length_mm: 22.5  # ArUco marker side length (typically 0.75 * square_length)
-  aruco_dict: "DICT_4X4_100"  # ArUco dictionary: DICT_4X4_50/100/250/1000, DICT_5X5_*, etc.
+  squares_x: 14           # Number of squares along the long (horizontal) edge
+  squares_y: 9            # Number of squares along the short (vertical) edge
+  square_length_mm: 40.0  # Chessboard square side length (measure with caliper!)
+  marker_length_mm: 30.0  # ArUco marker side length (typically 0.75 * square_length)
+  aruco_dict: "DICT_5X5_1000"  # ArUco dictionary: DICT_4X4_*, DICT_5X5_*, DICT_6X6_*, etc.
 
 # -----------------------------------------------------------------------------
 # ZED2i Camera Settings
 # -----------------------------------------------------------------------------
 camera:
+  # Backend selection:
+  #   "auto"  → pyzed if available (NVIDIA Ubuntu), else mock
+  #   "real"  → force ZED SDK (requires NVIDIA + pyzed)
+  #   "uvc"   → raw USB capture via OpenCV (no ZED SDK / NVIDIA required)
+  #   "mock"  → synthetic data for development
+  backend: "auto"
+
   resolution: "HD1080"    # HD2K, HD1080, HD720, VGA
   fps: 15                 # Capture FPS during calibration (lower = more stable)
-  # Serial number (optional, for multi-camera setups)
+
+  # UVC-only: which /dev/video* device to open (Linux) or AVFoundation index (macOS)
+  uvc_device_index: 0
+
+  # Serial number (optional, for multi-camera setups; SDK backend only)
   serial_number: null
 
 # -----------------------------------------------------------------------------
