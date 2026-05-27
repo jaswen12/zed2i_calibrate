@@ -165,18 +165,20 @@ def _validate_board_in_base_eih(
     """
     Eye-on-hand consistency: board origin in base frame.
 
-    For eye_on_hand:
-        T_result = T_gripper←cam (gripper to camera)
-        T_base←board = T_base←tcp @ T_tcp←cam @ T_cam←board
-                     = T_base←tcp @ inv(T_cam2gripper) @ T_cam←board
+    OpenCV's calibrateHandEye output ``cam2gripper`` is the homogeneous matrix
+    that transforms a point expressed in the camera frame into the gripper
+    frame, i.e. ``T_gripper_from_cam``. Composing the chain board → cam →
+    gripper (≡ tcp) → base:
 
-    The board is fixed in world, so T_base←board should be constant.
+        T_base_from_board = T_base_from_tcp @ T_gripper_from_cam @ T_cam_from_board
+                          = T_bt           @ T_cam2gripper      @ T_cb
+
+    The board is fixed in world, so ``T_base_from_board`` should be constant
+    across all samples; we measure its spread.
     """
-    T_gripper_cam = np.linalg.inv(T_cam2gripper)
-
     board_origins = []
     for T_bt, T_cb in zip(T_base_tcp_list, T_cam_board_list):
-        T_base_board = T_bt @ T_gripper_cam @ T_cb
+        T_base_board = T_bt @ T_cam2gripper @ T_cb
         board_origins.append(T_base_board[:3, 3])
 
     positions = np.array(board_origins)

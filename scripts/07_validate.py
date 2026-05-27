@@ -93,10 +93,9 @@ def main() -> None:
                 offsets.append(T_tcp_board[:3, 3])
             offsets = np.array(offsets)
         else:
-            T_gripper_cam = np.linalg.inv(T_result)
             positions = []
             for T_bt_i, T_cb_i in zip(T_bt, T_cb):
-                T_base_board = T_bt_i @ T_gripper_cam @ T_cb_i
+                T_base_board = T_bt_i @ T_result @ T_cb_i
                 positions.append(T_base_board[:3, 3])
             offsets = np.array(positions)
 
